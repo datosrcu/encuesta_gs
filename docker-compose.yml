@@ -1,0 +1,7 @@
+services:
+  encuesta:
+    build: .
+    container_name: encuesta_gabinete_social
+    ports:
+      - "8080:80"
+    restart: unless-stopped

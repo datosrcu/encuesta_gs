@@ -1,0 +1,20 @@
+{
+  "name": "Encuesta Gabinete Social",
+  "short_name": "EncuestaGS",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#F9FAFB",
+  "theme_color": "#009DE0",
+  "icons": [
+    {
+      "src": "Favicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "Favicon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
