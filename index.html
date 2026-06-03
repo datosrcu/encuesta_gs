@@ -15,6 +15,9 @@
     <meta name="theme-color" content="#009de0">
     <link rel="manifest" href="manifest.json">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Configuración Dinámica de Docker y Cliente de Supabase -->
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         /* ===== OBELISCO V2 · Design Tokens ===== */
         :root {
@@ -1525,6 +1528,20 @@
                     <p class="text-[10px] text-gray-400 mt-1">Suma este valor al contador del dispositivo.</p>
                 </div>
 
+                <div class="border-t border-[#e6ebf0] pt-4">
+                    <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Conexión Supabase (Opcional)</h4>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="question-label text-xs">Supabase URL</label>
+                            <input type="text" id="admin-supabase-url" class="input-field text-xs" placeholder="https://xyz.supabase.co o URL local">
+                        </div>
+                        <div>
+                            <label class="question-label text-xs">Supabase Anon Key</label>
+                            <input type="password" id="admin-supabase-key" class="input-field text-xs" placeholder="Clave anon (Token JWT)">
+                        </div>
+                    </div>
+                </div>
+
                 <div class="flex items-center gap-2 pt-2 border-t border-[#e6ebf0]">
                     <input type="checkbox" id="admin-show-progress"
                         class="w-4 h-4 rounded text-[#009de0] focus:ring-[#009de0] cursor-pointer">
@@ -1581,6 +1598,42 @@
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxznNBVsJ2dw5VssIMmGbTd16p3F08jN3lc1qlbuPZij_CNnVaUJUIeQuWUO2HLJIDW/exec';
         // ----------------------------------------
 
+        // --- CONFIGURACIÓN SUPABASE ---
+        let supabaseClient = null;
+
+        function initSupabase() {
+            let supabaseUrl = null;
+            let supabaseKey = null;
+
+            // 1. Buscar en config.js inyectado por Docker
+            if (window.SUPABASE_ENV && window.SUPABASE_ENV.SUPABASE_URL && window.SUPABASE_ENV.SUPABASE_ANON_KEY) {
+                supabaseUrl = window.SUPABASE_ENV.SUPABASE_URL;
+                supabaseKey = window.SUPABASE_ENV.SUPABASE_ANON_KEY;
+            } else {
+                // 2. Si no, buscar en localStorage
+                const manualSupa = JSON.parse(localStorage.getItem('supabase_config'));
+                if (manualSupa && manualSupa.url && manualSupa.key) {
+                    supabaseUrl = manualSupa.url;
+                    supabaseKey = manualSupa.key;
+                }
+            }
+
+            if (supabaseUrl && supabaseKey && typeof supabase !== 'undefined') {
+                try {
+                    supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+                    console.log('Supabase inicializado correctamente:', supabaseUrl);
+                } catch (e) {
+                    console.error('Error al inicializar Supabase:', e);
+                }
+            } else {
+                supabaseClient = null;
+                console.log('Supabase no configurado o no disponible (usando Google Apps Script de forma predeterminada)');
+            }
+        }
+
+        // Inicializar al cargar
+        initSupabase();
+
         // --- COLA DE ENVÍOS (a prueba de pérdida de datos / offline) ---
         // Cada encuesta se guarda primero en localStorage y se reintenta hasta confirmarse,
         // de modo que nunca se pierde una carga aunque falle la conexión.
@@ -1601,6 +1654,30 @@
         }
 
         async function sendPayload(payload) {
+            // Si Supabase está configurado, guardar allí
+            if (supabaseClient) {
+                const barrioVal = payload['Barrio Seleccionado'] || 'No especificado';
+                const encuestadorVal = payload['1. Nombre y apellido del encuestador'] || 'No especificado';
+
+                const { data, error } = await supabaseClient
+                    .from('encuestas')
+                    .insert([
+                        {
+                            barrio: barrioVal,
+                            encuestador: encuestadorVal,
+                            datos: payload
+                        }
+                    ]);
+
+                if (error) {
+                    console.error('Error de Supabase:', error);
+                    throw error;
+                }
+                console.log('Guardado en Supabase con éxito');
+                return;
+            }
+
+            // Fallback a Google Apps Script
             const params = new URLSearchParams();
             for (const key in payload) params.append(key, payload[key]);
             // Apps Script obliga a usar no-cors; la promesa resuelve si la petición salió.
@@ -1911,6 +1988,11 @@
                 document.getElementById('admin-count-offset').value = adminData.offset || 0;
                 document.getElementById('admin-show-progress').checked = adminData.showProgress || false;
             }
+            // Cargar configuración manual de Supabase si existe
+            const manualSupa = JSON.parse(localStorage.getItem('supabase_config')) || {};
+            document.getElementById('admin-supabase-url').value = manualSupa.url || '';
+            document.getElementById('admin-supabase-key').value = manualSupa.key || '';
+
             document.getElementById('admin-modal').classList.remove('hidden');
         }
 
@@ -1924,6 +2006,9 @@
             const hogares = document.getElementById('admin-hogares').value;
             const offset = parseInt(document.getElementById('admin-count-offset').value) || 0;
             const showProgress = document.getElementById('admin-show-progress').checked;
+
+            const supaUrl = document.getElementById('admin-supabase-url').value.trim();
+            const supaKey = document.getElementById('admin-supabase-key').value.trim();
 
             if (!barrio || !habitantes || !hogares) {
                 alert('Por favor complete todos los campos');
@@ -1940,6 +2025,16 @@
             };
 
             localStorage.setItem('survey_config', JSON.stringify(adminData));
+
+            if (supaUrl || supaKey) {
+                localStorage.setItem('supabase_config', JSON.stringify({ url: supaUrl, key: supaKey }));
+            } else {
+                localStorage.removeItem('supabase_config');
+            }
+
+            // Re-inicializar Supabase con los nuevos datos
+            initSupabase();
+
             updateProgressUI();
             closeAdmin();
             alert('Configuración guardada correctamente.');
