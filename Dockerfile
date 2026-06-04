@@ -9,7 +9,7 @@ COPY package*.json ./
 RUN npm install --only=production
 
 # Copiar el código del servidor y archivos estáticos
-COPY server.js index.html sw.js manifest.json Datos.png Favicon.png SGyPC.png ./
+COPY server.js index.html sw.js manifest.json Datos.png Favicon.png SGyPC.png dashboard.html dashboard.css dashboard.js ./
 
 # El puerto por defecto del servidor es 3000 (configurable via PORT env var)
 EXPOSE 3000
