@@ -2,9 +2,8 @@
 .gitignore
 .dockerignore
 Dockerfile
-docker-compose.yml
 README.md
-backend/
-Dockerfile.backend
 .env
 .env.example
+node_modules/
+package-lock.json

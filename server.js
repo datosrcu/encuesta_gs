@@ -1,6 +1,8 @@
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
+const path = require('path');
+const compression = require('compression');
 require('dotenv').config();
 
 const app = express();
@@ -8,8 +10,9 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+app.use(compression());
 
-// Configuración de MySQL
+// Configuración de conexión MySQL (VPS)
 const dbConfig = {
   host: process.env.DB_HOST || 'bases-de-datosmysql-encuestas-r7v7gg',
   port: parseInt(process.env.DB_PORT || '3306'),
@@ -25,16 +28,14 @@ let pool;
 
 async function initDb() {
   const maxRetries = 10;
-  let delay = 3000; // 3 segundos de espera inicial
+  let delay = 3000;
 
   for (let i = 1; i <= maxRetries; i++) {
     try {
       console.log(`Intentando conectar a MySQL (Intento ${i}/${maxRetries})...`);
-      
-      // Probar conexión y crear el pool
       pool = mysql.createPool(dbConfig);
       
-      // Realizar una consulta de prueba
+      // Validar conexión
       const connection = await pool.getConnection();
       console.log('Conexión exitosa a MySQL.');
       connection.release();
@@ -50,7 +51,7 @@ async function initDb() {
       }
       console.log(`Esperando ${delay / 1000} segundos antes del siguiente intento...`);
       await new Promise(res => setTimeout(res, delay));
-      delay = Math.min(delay * 1.5, 15000); // Backoff exponencial
+      delay = Math.min(delay * 1.5, 15000);
     }
   }
 }
@@ -90,18 +91,19 @@ async function createTables() {
 
     conn.release();
   } catch (err) {
-    console.error('Error al crear las tablas en la base de datos:', err);
+    console.error('Error al inicializar las tablas en la base de datos:', err);
     process.exit(1);
   }
 }
 
-// Endpoints
-app.get('/health', (req, res) => {
+// --- Endpoints de API ---
+
+app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', database: pool ? 'connected' : 'disconnected' });
 });
 
 // Guardar Encuesta
-app.post('/encuestas', async (req, res) => {
+app.post('/api/encuestas', async (req, res) => {
   const { barrio, encuestador, datos } = req.body;
 
   if (!datos) {
@@ -123,7 +125,7 @@ app.post('/encuestas', async (req, res) => {
 });
 
 // Guardar Alerta
-app.post('/alertas', async (req, res) => {
+app.post('/api/alertas', async (req, res) => {
   const { tipo, urgencia, nota, encuestador, barrio, ubicacion, encuestado, estado } = req.body;
 
   if (!tipo) {
@@ -154,9 +156,41 @@ app.post('/alertas', async (req, res) => {
   }
 });
 
-// Inicializar base de datos y arrancar servidor
+// --- Servir Estáticos del Frontend con Cabeceras Especiales PWA ---
+
+// Cabeceras anti-caché para el Service Worker
+app.get('/sw.js', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.sendFile(path.join(__dirname, 'sw.js'));
+});
+
+// Cabeceras anti-caché para el Manifiesto
+app.get('/manifest.json', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate, max-age=0');
+  res.sendFile(path.join(__dirname, 'manifest.json'));
+});
+
+// Servir archivos estáticos por defecto (imágenes, fuentes, etc.)
+app.use(express.static(__dirname, {
+  maxAge: '1y',
+  setHeaders: (res, path) => {
+    // Si es el index.html, no cachear de forma agresiva
+    if (path.endsWith('index.html')) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate, max-age=0');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, no-transform');
+    }
+  }
+}));
+
+// Fallback para cualquier otra ruta (Redirigir a index.html)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Inicializar DB y Arrancar Servidor
 initDb().then(() => {
   app.listen(PORT, () => {
-    console.log(`Servidor backend corriendo en el puerto ${PORT}`);
+    console.log(`Servidor unificado de Encuesta corriendo en el puerto ${PORT}`);
   });
 });

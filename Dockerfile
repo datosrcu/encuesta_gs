@@ -1,23 +1,18 @@
-FROM nginx:alpine
+FROM node:18-alpine
 
-# Copiar la configuración personalizada de Nginx
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+WORKDIR /usr/src/app
 
-# Copiar los archivos estáticos de la aplicación al directorio de Nginx
-COPY . /usr/share/nginx/html
+# Copiar configuración de dependencias
+COPY package*.json ./
 
-# Eliminar archivos innecesarios de la carpeta pública
-RUN rm -rf /usr/share/nginx/html/nginx.conf \
-           /usr/share/nginx/html/Dockerfile \
-           /usr/share/nginx/html/Dockerfile.backend \
-           /usr/share/nginx/html/docker-compose.yml \
-           /usr/share/nginx/html/backend \
-           /usr/share/nginx/html/docker-entrypoint.sh \
-           /usr/share/nginx/html/config.js
+# Instalar dependencias de producción
+RUN npm install --only=production
 
-# Exponer el puerto 80
-EXPOSE 80
+# Copiar el código del servidor y archivos estáticos
+COPY server.js index.html sw.js manifest.json Datos.png Favicon.png SGyPC.png ./
 
-# Iniciar Nginx
-CMD ["nginx", "-g", "daemon off;"]
+# El puerto por defecto del servidor es 3000 (configurable via PORT env var)
+EXPOSE 3000
+
+CMD ["node", "server.js"]
 
