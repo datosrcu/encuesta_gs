@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor de Relevamiento - Gabinete Social</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PapaParse -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <link rel="stylesheet" href="dashboard.css">
+    <link rel="icon" type="image/png" href="Favicon.png">
+</head>
+
+<body>
+    <div class="dashboard-container">
+        <!-- Top Header -->
+        <header class="topbar">
+            <div class="logo-top-left">
+                <img src="Datos.png" alt="Logo Datos" class="logo-datos" onerror="this.style.display='none'">
+            </div>
+            <div class="title-container">
+                <h1>MONITOR DE RELEVAMIENTO SOCIODEMOGRÁFICO</h1>
+                <p>Análisis barrial y por módulos</p>
+            </div>
+            <div class="actions">
+                <div class="filter-container">
+                    <span class="material-symbols-outlined">location_on</span>
+                    <select id="barrio-filter" class="filter-select">
+                        <option value="todos">Todos los Barrios</option>
+                    </select>
+                </div>
+                <button id="refresh-btn" class="btn primary-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+                        <path d="M21 3v5h-5" />
+                    </svg>
+                    Actualizar
+                </button>
+            </div>
+        </header>
+
+        <!-- Wizard Navigation -->
+        <nav class="wizard-nav">
+            <div class="wizard-step active" data-target="sec-hogar">Hogar</div>
+            <div class="wizard-step" data-target="sec-identidad">Identidad</div>
+            <div class="wizard-step" data-target="sec-educacion">Educación</div>
+            <div class="wizard-step" data-target="sec-desarrollo">Desarrollo Social</div>
+            <div class="wizard-step" data-target="sec-conectividad">Conectividad</div>
+            <div class="wizard-step" data-target="sec-discapacidad">Discapacidad</div>
+            <div class="wizard-step" data-target="sec-mayores">Adultos Mayores</div>
+            <div class="wizard-step" data-target="sec-salud">Salud</div>
+            <div class="wizard-step" data-target="sec-zoonosis">Zoonosis y Mascotas</div>
+            <div class="wizard-step" data-target="sec-servicios">Servicios</div>
+        </nav>
+
+        <main class="dashboard-content">
+            <!-- Loading Indicator -->
+            <div id="loader" class="loader-container">
+                <div class="spinner"></div>
+                <p>Cargando datos del relevamiento...</p>
+            </div>
+
+            <!-- Dashboard Data -->
+            <div id="dashboard-data" class="hidden">
+
+                <!-- Section: Hogar -->
+                <section id="sec-hogar" class="dashboard-section active">
+                    <div class="section-kpis">
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">home</span></div>
+                            <div class="kpi-info">
+                                <h3>Total Hogares</h3>
+                                <p id="kpi-hogar-total" class="kpi-value">0</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">group</span></div>
+                            <div class="kpi-info">
+                                <h3>Personas</h3>
+                                <p id="kpi-hogar-personas" class="kpi-value">0</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">leaderboard</span></div>
+                            <div class="kpi-info">
+                                <h3>Habitantes / Hogar</h3>
+                                <p id="kpi-hogar-promedio" class="kpi-value">0</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">school</span></div>
+                            <div class="kpi-info">
+                                <h3>Asistencia Escolar</h3>
+                                <p id="kpi-hogar-escuela" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="section-grid">
+                        <div class="chart-card glass">
+                            <h2>Distribución Etaria (Adultos vs Menores)</h2>
+                            <div class="section-chart-container"><canvas id="chart-hogar-etaria"></canvas></div>
+                        </div>
+                        <div class="chart-card glass" style="padding: 0; overflow: hidden;">
+                            <div class="section-chart-container" style="height: 650px; margin-top: 0;">
+                                <iframe width="100%" height="100%"
+                                    src="https://lookerstudio.google.com/embed/reporting/316f911d-ddcc-4562-b290-a9283fd705df/page/page_12345"
+                                    frameborder="0" style="border:0" allowfullscreen></iframe>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Section: Identidad -->
+                <section id="sec-identidad" class="dashboard-section">
+                    <div class="section-kpis">
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">badge</span></div>
+                            <div class="kpi-info">
+                                <h3>Doc. Completa</h3>
+                                <p id="kpi-identidad-completa" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">person_off</span></div>
+                            <div class="kpi-info">
+                                <h3>Sin Documentación</h3>
+                                <p id="kpi-identidad-falta" class="kpi-value">0</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass">
+                        <h2>Situación de Identidad por Hogar</h2>
+                        <p>Hogares donde al menos un integrante no cuenta con DNI actualizado.</p>
+                        <div class="section-chart-container"><canvas id="chart-identidad-dni"></canvas></div>
+                    </div>
+                </section>
+
+                <!-- Section: Educación -->
+                <section id="sec-educacion" class="dashboard-section">
+                    <div class="section-kpis">
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">school</span></div>
+                            <div class="kpi-info">
+                                <h3>Asistencia Escolar</h3>
+                                <p id="kpi-educacion-escuela" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">menu_book</span></div>
+                            <div class="kpi-info">
+                                <h3>Analfabetismo (>10años)</h3>
+                                <p id="kpi-educacion-leer" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="section-grid">
+                        <div class="chart-card glass">
+                            <h2>Asistencia a la Escuela</h2>
+                            <div class="section-chart-container"><canvas id="chart-educacion-asistencia"></canvas></div>
+                        </div>
+                        <div class="chart-card glass">
+                            <h2>Alfabetización por Hogar</h2>
+                            <div class="section-chart-container"><canvas id="chart-educacion-leer"></canvas></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Section: Desarrollo Social -->
+                <section id="sec-desarrollo" class="dashboard-section">
+                    <div class="section-kpis">
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">volunteer_activism</span>
+                            </div>
+                            <div class="kpi-info">
+                                <h3>Asistencia Social</h3>
+                                <p id="kpi-social-asistencia" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">restaurant</span></div>
+                            <div class="kpi-info">
+                                <h3>Uso de Merenderos</h3>
+                                <p id="kpi-social-merenderos" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">local_dining</span></div>
+                            <div class="kpi-info">
+                                <h3>Hogares con 4 Comidas</h3>
+                                <p id="kpi-social-comidas" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="section-grid">
+                        <div class="chart-card glass">
+                            <h2>Distribución de Programas</h2>
+                            <div class="section-chart-container"><canvas id="chart-social-programas"></canvas></div>
+                        </div>
+                        <div class="chart-card glass">
+                            <h2>Hogares en Comedores</h2>
+                            <div class="section-chart-container"><canvas id="chart-social-comedores"></canvas></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Section: Conectividad -->
+                <section id="sec-conectividad" class="dashboard-section">
+                    <div class="section-kpis">
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">wifi</span></div>
+                            <div class="kpi-info">
+                                <h3>Conexión Wi-Fi</h3>
+                                <p id="kpi-conectividad-wifi" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">devices</span></div>
+                            <div class="kpi-info">
+                                <h3>Dispositivos (PC/Cel)</h3>
+                                <p id="kpi-conectividad-dispositivos" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass">
+                        <h2>Brecha Digital</h2>
+                        <div class="section-chart-container"><canvas id="chart-conectividad-brecha"></canvas></div>
+                    </div>
+                </section>
+
+                <!-- Section: Discapacidad -->
+                <section id="sec-discapacidad" class="dashboard-section">
+                    <div class="section-kpis">
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">accessible</span></div>
+                            <div class="kpi-info">
+                                <h3>Hogares c/ Disc.</h3>
+                                <p id="kpi-discapacidad-reside" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">verified</span></div>
+                            <div class="kpi-info">
+                                <h3>Tienen CUD</h3>
+                                <p id="kpi-discapacidad-cud" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">diversity_3</span></div>
+                            <div class="kpi-info">
+                                <h3>Participación en Programas de Discapacidad</h3>
+                                <p id="kpi-discapacidad-municipal" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="section-grid">
+                        <div class="chart-card glass">
+                            <h2>Tipos de Discapacidad</h2>
+                            <div class="section-chart-container"><canvas id="chart-discapacidad-tipos"></canvas></div>
+                        </div>
+                        <div class="chart-card glass">
+                            <h2>Participación en Programas de Discapacidad del Gobierno de Río Cuarto</h2>
+                            <div class="section-chart-container"><canvas id="chart-discapacidad-participacion"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Section: Adultos Mayores -->
+                <section id="sec-mayores" class="dashboard-section">
+                    <div class="section-kpis">
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">elderly</span></div>
+                            <div class="kpi-info">
+                                <h3>Hogares c/ Adultos</h3>
+                                <p id="kpi-mayores-reside" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">payments</span></div>
+                            <div class="kpi-info">
+                                <h3>Jubilación/Pensión</h3>
+                                <p id="kpi-mayores-jubilacion" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">home_work</span></div>
+                            <div class="kpi-info">
+                                <h3>Centro de Jubilados</h3>
+                                <p id="kpi-mayores-centro" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="section-grid">
+                        <div class="chart-card glass">
+                            <h2>Cobertura Previsional</h2>
+                            <div class="section-chart-container"><canvas id="chart-mayores-jubilacion"></canvas></div>
+                        </div>
+                        <div class="chart-card glass">
+                            <h2>Centros de Jubilados</h2>
+                            <div class="section-chart-container"><canvas id="chart-mayores-centros"></canvas></div>
+                        </div>
+                        <div class="chart-card glass">
+                            <h2>Nombres de Centros de Jubilados</h2>
+                            <div class="section-chart-container"><canvas id="chart-mayores-nombres"></canvas></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Section: Salud -->
+                <section id="sec-salud" class="dashboard-section">
+                    <div class="section-kpis">
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">medical_services</span></div>
+                            <div class="kpi-info">
+                                <h3>Asiste a CAPS/S24</h3>
+                                <p id="kpi-salud-caps" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">vaccines</span></div>
+                            <div class="kpi-info">
+                                <h3>Vacunación Completa</h3>
+                                <p id="kpi-salud-vacunas" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">healing</span></div>
+                            <div class="kpi-info">
+                                <h3>Enf. Crónicas</h3>
+                                <p id="kpi-salud-cronicas" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="section-grid">
+                        <div class="chart-card glass">
+                            <h2>Atención en Centros de Salud</h2>
+                            <div class="section-chart-container"><canvas id="chart-salud-centros"></canvas></div>
+                        </div>
+                        <div class="chart-card glass">
+                            <h2>Vacunación en Niños</h2>
+                            <div class="section-chart-container"><canvas id="chart-salud-vacunacion"></canvas></div>
+                        </div>
+                        <div class="chart-card glass">
+                            <h2>Reg. de Embarazadas</h2>
+                            <div class="section-chart-container"><canvas id="chart-salud-embarazo"></canvas></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Section: Zoonosis -->
+                <section id="sec-zoonosis" class="dashboard-section">
+                    <div class="section-kpis">
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">pets</span></div>
+                            <div class="kpi-info">
+                                <h3>Hogares c/ Mascotas</h3>
+                                <p id="kpi-zoonosis-mascotas" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">health_and_safety</span></div>
+                            <div class="kpi-info">
+                                <h3>Vacuna Antirrábica</h3>
+                                <p id="kpi-zoonosis-rabia" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                        <div class="kpi-card glass">
+                            <div class="kpi-icon"><span class="material-symbols-outlined">medication</span></div>
+                            <div class="kpi-info">
+                                <h3>Castrados</h3>
+                                <p id="kpi-zoonosis-castrados" class="kpi-value">0%</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass">
+                        <h2>Tenencia Responsable de Mascotas</h2>
+                        <div class="section-chart-container"><canvas id="chart-zoonosis-tenencia"></canvas></div>
+                    </div>
+                </section>
+
+                <!-- Section: Servicios -->
+                <section id="sec-servicios" class="dashboard-section">
+                    <div class="glass mb-6">
+                        <div class="section-chart-container" style="height: 480px; margin-top: 1.5rem;"><canvas
+                                id="chart-servicios-evaluacion"></canvas></div>
+                        <div class="services-icons-row">
+                            <div class="service-icon-col"><span
+                                    class="material-symbols-outlined">lightbulb</span><br>Alumbrado</div>
+                            <div class="service-icon-col"><span
+                                    class="material-symbols-outlined">delete</span><br>Basura</div>
+                            <div class="service-icon-col"><span
+                                    class="material-symbols-outlined">cleaning_services</span><br>Desmalezado</div>
+                            <div class="service-icon-col"><span class="material-symbols-outlined">road</span><br>Calles
+                            </div>
+                            <div class="service-icon-col"><span
+                                    class="material-symbols-outlined">sprinkler</span><br>Riego</div>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+
+        <footer class="footer-dashboard">
+            <img src="SGyPC.png" alt="SGyPC" class="logo-footer" onerror="this.style.display='none'">
+        </footer>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+
+</html>

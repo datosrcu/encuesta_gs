@@ -102,6 +102,59 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', database: pool ? 'connected' : 'disconnected' });
 });
 
+// Obtener todas las encuestas
+app.get('/api/encuestas', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT id, barrio, encuestador, datos, created_at FROM encuestas ORDER BY id DESC');
+    const encuestas = rows.map(r => {
+      let datosParsed = r.datos;
+      if (typeof datosParsed === 'string') {
+        try { datosParsed = JSON.parse(datosParsed); } catch (e) { datosParsed = {}; }
+      }
+      return {
+        id: r.id,
+        barrio: r.barrio,
+        encuestador: r.encuestador,
+        datos: datosParsed,
+        created_at: r.created_at
+      };
+    });
+    res.json(encuestas);
+  } catch (err) {
+    console.error('Error al obtener encuestas:', err);
+    res.status(500).json({ error: 'Error interno del servidor al obtener las encuestas' });
+  }
+});
+
+// Obtener todas las alertas
+app.get('/api/alertas', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT id, tipo, urgencia, nota, encuestador, barrio, ubicacion, encuestado, estado, created_at FROM alertas ORDER BY id DESC');
+    const alertas = rows.map(r => {
+      let encuestadoParsed = r.encuestado;
+      if (typeof encuestadoParsed === 'string') {
+        try { encuestadoParsed = JSON.parse(encuestadoParsed); } catch (e) { encuestadoParsed = {}; }
+      }
+      return {
+        id: r.id,
+        tipo: r.tipo,
+        urgencia: r.urgencia,
+        nota: r.nota,
+        encuestador: r.encuestador,
+        barrio: r.barrio,
+        ubicacion: r.ubicacion,
+        encuestado: encuestadoParsed,
+        estado: r.estado,
+        created_at: r.created_at
+      };
+    });
+    res.json(alertas);
+  } catch (err) {
+    console.error('Error al obtener alertas:', err);
+    res.status(500).json({ error: 'Error interno del servidor al obtener las alertas' });
+  }
+});
+
 // Guardar Encuesta
 app.post('/api/encuestas', async (req, res) => {
   const { barrio, encuestador, datos } = req.body;
@@ -174,8 +227,8 @@ app.get('/manifest.json', (req, res) => {
 app.use(express.static(__dirname, {
   maxAge: '1y',
   setHeaders: (res, path) => {
-    // Si es el index.html, no cachear de forma agresiva
-    if (path.endsWith('index.html')) {
+    // Si es el index.html o dashboard.html, no cachear de forma agresiva
+    if (path.endsWith('index.html') || path.endsWith('dashboard.html')) {
       res.setHeader('Cache-Control', 'no-cache, must-revalidate, max-age=0');
     } else {
       res.setHeader('Cache-Control', 'public, max-age=31536000, no-transform');
