@@ -2,6 +2,8 @@
 let surveyRecords = [];
 let alertRecords = [];
 let charts = {};
+let leafletMap = null;
+let markerLayer = null;
 
 // Colors aligned with the Obelisco design system
 const chartColors = {
@@ -68,6 +70,14 @@ function initNavigation() {
       const activeSection = document.getElementById(targetId);
       if (activeSection) {
         activeSection.classList.add('active');
+        
+        // Corrección de Leaflet: invalidar tamaño al mostrar el tab del mapa
+        if (targetId === 'sec-mapa' && leafletMap) {
+          setTimeout(() => {
+            leafletMap.invalidateSize();
+            renderSurveyMap();
+          }, 100);
+        }
       }
     });
   });
@@ -997,6 +1007,11 @@ function renderDashboard() {
   // SECCIÓN 12: REPORTES DETALLADOS
   // ----------------------------------------
   renderReportesTable();
+
+  // ----------------------------------------
+  // SECCIÓN 13: MAPA DE RELEVAMIENTO
+  // ----------------------------------------
+  renderSurveyMap();
 }
 
 // Renderiza la tabla de reportes individuales con soporte de búsqueda
@@ -1231,5 +1246,119 @@ function exportToCSV() {
   } catch (error) {
     console.error('Error al exportar CSV:', error);
     alert('Ocurrió un error al exportar los datos: ' + error.message);
+  }
+}
+
+// Inicializa o actualiza el mapa interactivo con los marcadores de las encuestas
+function renderSurveyMap() {
+  const selectedBarrio = document.getElementById('barrio-filter').value;
+  
+  // Filtrar registros de encuestas por barrio
+  const records = surveyRecords.filter(r => {
+    if (selectedBarrio === 'todos') return true;
+    const b = r.barrio || (r.datos && r.datos['Barrio Seleccionado']);
+    return b === selectedBarrio;
+  });
+
+  // Extraer puntos válidos de georreferencia
+  const points = [];
+  records.forEach(r => {
+    if (!r.datos) return;
+    const coordsStr = r.datos['Ubicación'] || r.datos['ubicacion'] || '';
+    if (coordsStr) {
+      const parts = coordsStr.split(',');
+      if (parts.length === 2) {
+        const lat = parseFloat(parts[0].trim());
+        const lng = parseFloat(parts[1].trim());
+        if (!isNaN(lat) && !isNaN(lng)) {
+          points.push({ lat, lng, record: r });
+        }
+      }
+    }
+  });
+
+  // Actualizar KPIs de mapa
+  const kpiPuntos = document.getElementById('kpi-mapa-puntos');
+  if (kpiPuntos) kpiPuntos.textContent = points.length;
+
+  const kpiBarrio = document.getElementById('kpi-mapa-barrio');
+  if (kpiBarrio) {
+    kpiBarrio.textContent = selectedBarrio === 'todos' ? 'Todos los Barrios' : selectedBarrio;
+  }
+
+  const mapDiv = document.getElementById('relevamiento-map');
+  if (!mapDiv) return;
+
+  // Inicializar mapa de Leaflet si no está creado
+  if (!leafletMap) {
+    // Centro por defecto: Río Cuarto, Argentina (-33.1236, -64.3493)
+    leafletMap = L.map('relevamiento-map').setView([-33.1236, -64.3493], 13);
+    
+    // Capa de mosaico de OpenStreetMap
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(leafletMap);
+
+    markerLayer = L.layerGroup().addTo(leafletMap);
+  }
+
+  // Limpiar marcadores viejos
+  markerLayer.clearLayers();
+
+  if (points.length === 0) {
+    leafletMap.setView([-33.1236, -64.3493], 13);
+    return;
+  }
+
+  const bounds = [];
+  points.forEach(pt => {
+    const r = pt.record;
+    const dateStr = r.created_at ? new Date(r.created_at).toLocaleString('es-AR') : 'Sin fecha';
+    const encuestador = r.encuestador || 'No especificado';
+    const barrio = r.barrio || 'No especificado';
+
+    // Contar integrantes de forma dinámica
+    const getVal = (rec, keyWord) => {
+      if (!rec.datos) return undefined;
+      if (rec.datos.hasOwnProperty(keyWord)) return rec.datos[keyWord];
+      const matchKey = Object.keys(rec.datos).find(k => k.toLowerCase().includes(keyWord.toLowerCase()));
+      return matchKey ? rec.datos[matchKey] : undefined;
+    };
+    const q2Val = getVal(r, 'person') || getVal(r, 'q2') || '0';
+    const numPers = parseInt(q2Val) || (q2Val.includes('10') ? 10 : 0) || '-';
+
+    // Contenido del popup
+    const popupContent = `
+      <div style="font-family: 'Inter', sans-serif; font-size: 13px; color: #1a1a1a; min-width: 180px;">
+        <h4 style="margin: 0 0 6px 0; color: #009de0; font-weight: 700; border-bottom: 1px solid #e6f5fc; padding-bottom: 4px;">Encuesta #${r.id}</h4>
+        <p style="margin: 3px 0;"><strong>Barrio:</strong> ${barrio}</p>
+        <p style="margin: 3px 0;"><strong>Encuestador:</strong> ${encuestador}</p>
+        <p style="margin: 3px 0;"><strong>Fecha:</strong> ${dateStr}</p>
+        <p style="margin: 3px 0;"><strong>Integrantes:</strong> ${numPers}</p>
+        <button class="btn primary-btn" id="map-btn-${r.id}" style="padding: 6px 8px; font-size: 11px; border-radius: 4px; margin-top: 8px; cursor: pointer; width: 100%; display: flex; align-items: center; justify-content: center; gap: 4px; box-shadow: none;">
+          Ver Ficha Completa
+        </button>
+      </div>
+    `;
+
+    const marker = L.marker([pt.lat, pt.lng]).addTo(markerLayer);
+    marker.bindPopup(popupContent);
+    
+    // Al abrir el popup, enlazar el click del botón a openSurveyModal
+    marker.on('popupopen', () => {
+      const btn = document.getElementById(`map-btn-${r.id}`);
+      if (btn) {
+        btn.addEventListener('click', () => {
+          openSurveyModal(r);
+        });
+      }
+    });
+
+    bounds.push([pt.lat, pt.lng]);
+  });
+
+  // Re-encuadrar mapa para mostrar todos los marcadores con margen
+  if (bounds.length > 0) {
+    leafletMap.fitBounds(bounds, { padding: [50, 50] });
   }
 }
