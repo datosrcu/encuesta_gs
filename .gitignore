@@ -30,3 +30,6 @@ logs/
 # para preview/hosting estático se crea a mano. No se versiona.
 config.js
 
+# Node dependencies
+node_modules/
+

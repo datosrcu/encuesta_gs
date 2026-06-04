@@ -1,10 +1,23 @@
 services:
-  encuesta:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: encuesta_backend
+    environment:
+      - DB_HOST=${DB_HOST:-bases-de-datosmysql-encuestas-r7v7gg}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER:-mysql}
+      - DB_PASSWORD=${DB_PASSWORD:-unnhdwnhq1w7tfvu}
+      - DB_NAME=${DB_NAME:-mysql}
+      - PORT=3000
+    restart: unless-stopped
+
+  frontend:
     build: .
-    container_name: encuesta_gabinete_social
+    container_name: encuesta_frontend
     ports:
       - "8080:80"
-    environment:
-      - SUPABASE_URL=${SUPABASE_URL:-}
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
     restart: unless-stopped
+    depends_on:
+      - backend
