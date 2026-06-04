@@ -1,5 +1,6 @@
 // Global state for survey records
 let surveyRecords = [];
+let alertRecords = [];
 let charts = {};
 
 // Colors aligned with the Obelisco design system
@@ -23,6 +24,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('refresh-btn').addEventListener('click', loadData);
   document.getElementById('barrio-filter').addEventListener('change', renderDashboard);
+
+  // Eventos para buscador de reportes
+  const searchInput = document.getElementById('reportes-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', renderReportesTable);
+  }
+
+  // Evento de exportación a CSV
+  const exportBtn = document.getElementById('btn-export-csv');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', exportToCSV);
+  }
+
+  // Eventos de cierre de modal
+  const closeBtn = document.getElementById('close-modal-btn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', closeSurveyModal);
+  }
+  const modal = document.getElementById('survey-modal');
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeSurveyModal();
+    });
+  }
 });
 
 // Wizard style tabs navigation
@@ -48,7 +73,7 @@ function initNavigation() {
   });
 }
 
-// Fetch all surveys from the ununified backend API
+// Fetch all surveys and alerts from the ununified backend API
 async function loadData() {
   const loader = document.getElementById('loader');
   const content = document.getElementById('dashboard-data');
@@ -57,11 +82,17 @@ async function loadData() {
   content.classList.add('hidden');
 
   try {
-    const response = await fetch('/api/encuestas');
-    if (!response.ok) throw new Error(`Error en API: ${response.status}`);
+    const [surveyResponse, alertResponse] = await Promise.all([
+      fetch('/api/encuestas'),
+      fetch('/api/alertas')
+    ]);
+    if (!surveyResponse.ok) throw new Error(`Error en API Encuestas: ${surveyResponse.status}`);
+    if (!alertResponse.ok) throw new Error(`Error en API Alertas: ${alertResponse.status}`);
     
-    surveyRecords = await response.json();
-    console.log('Datos cargados:', surveyRecords);
+    surveyRecords = await surveyResponse.json();
+    alertRecords = await alertResponse.json();
+    console.log('Encuestas cargadas:', surveyRecords);
+    console.log('Alertas cargadas:', alertRecords);
 
     populateBarrioFilter();
     renderDashboard();
@@ -887,4 +918,318 @@ function renderDashboard() {
       plugins: { legend: { display: false } }
     }
   });
+
+  // ----------------------------------------
+  // SECTION 11: ALERTAS CRÍTICAS
+  // ----------------------------------------
+  const alerts = alertRecords.filter(a => {
+    if (selectedBarrio === 'todos') return true;
+    const b = a.barrio || (a.encuestado && a.encuestado.barrio);
+    return b === selectedBarrio;
+  });
+
+  const totalAlerts = alerts.length;
+  const highUrgencyAlerts = alerts.filter(a => a.urgencia === 'Alta').length;
+  const alertsWithGps = alerts.filter(a => a.ubicacion).length;
+
+  document.getElementById('kpi-alertas-total').textContent = totalAlerts;
+  document.getElementById('kpi-alertas-alta').textContent = highUrgencyAlerts;
+  document.getElementById('kpi-alertas-gps').textContent = alertsWithGps;
+
+  const tbody = document.getElementById('alertas-table-body');
+  if (tbody) {
+    tbody.innerHTML = '';
+    if (alerts.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+            No se registraron alertas críticas para este barrio.
+          </td>
+        </tr>
+      `;
+    } else {
+      alerts.forEach(a => {
+        const tr = document.createElement('tr');
+        
+        const dateStr = a.created_at ? new Date(a.created_at).toLocaleString('es-AR') : 'Sin fecha';
+        const badgeClass = a.urgencia === 'Alta' ? 'badge badge-danger' : 'badge badge-warning';
+        const badgeHtml = `<span class="${badgeClass}">${a.urgencia || 'Alta'}</span>`;
+        
+        let gpsHtml = '<span class="text-gray-400">-</span>';
+        if (a.ubicacion) {
+          gpsHtml = `
+            <a href="https://maps.google.com/?q=${a.ubicacion}" target="_blank" class="primary-btn btn" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; text-decoration: none; border-radius: 4px; display: inline-flex; align-items: center; gap: 2px;">
+              <span class="material-symbols-outlined" style="font-size: 14px;">map</span> Mapa
+            </a>
+          `;
+        }
+        
+        let contactHtml = 'Sin datos';
+        if (a.encuestado) {
+          const e = a.encuestado;
+          const fullName = [e.nombre, e.apellido].filter(Boolean).join(' ') || 'Anónimo';
+          const details = [];
+          if (e.dni) details.push(`DNI: ${e.dni}`);
+          if (e.telefono) details.push(`Tel: ${e.telefono}`);
+          if (e.direccion) details.push(`Dir: ${e.direccion}`);
+          contactHtml = `
+            <strong>${fullName}</strong>
+            ${details.length ? '<br><span style="font-size: 0.75rem; color: var(--text-muted);">' + details.join(' | ') + '</span>' : ''}
+          `;
+        }
+        
+        tr.innerHTML = `
+          <td style="padding: 1rem 0.75rem;">${dateStr}</td>
+          <td style="padding: 1rem 0.75rem;"><strong>${a.barrio || '-'}</strong></td>
+          <td style="padding: 1rem 0.75rem;">${a.encuestador || '-'}</td>
+          <td style="padding: 1rem 0.75rem; font-weight: 500;">${a.tipo || '-'}</td>
+          <td style="padding: 1rem 0.75rem; text-align: center;">${badgeHtml}</td>
+          <td style="padding: 1rem 0.75rem; font-style: italic; max-width: 250px; overflow: hidden; text-overflow: ellipsis;" title="${a.nota || ''}">${a.nota || '-'}</td>
+          <td style="padding: 1rem 0.75rem;">${contactHtml}</td>
+          <td style="padding: 1rem 0.75rem; text-align: center;">${gpsHtml}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+  }
+
+  // ----------------------------------------
+  // SECCIÓN 12: REPORTES DETALLADOS
+  // ----------------------------------------
+  renderReportesTable();
+}
+
+// Renderiza la tabla de reportes individuales con soporte de búsqueda
+function renderReportesTable() {
+  const selectedBarrio = document.getElementById('barrio-filter').value;
+  const searchVal = (document.getElementById('reportes-search')?.value || '').toLowerCase().trim();
+
+  // Filtrar registros por barrio
+  const filteredByBarrio = surveyRecords.filter(r => {
+    if (selectedBarrio === 'todos') return true;
+    const b = r.barrio || (r.datos && r.datos['Barrio Seleccionado']);
+    return b === selectedBarrio;
+  });
+
+  // Filtrar registros por buscador
+  const records = filteredByBarrio.filter(r => {
+    if (!searchVal) return true;
+    const barrio = (r.barrio || '').toLowerCase();
+    const encuestador = (r.encuestador || '').toLowerCase();
+    const answersText = r.datos ? Object.values(r.datos).join(' ').toLowerCase() : '';
+    return barrio.includes(searchVal) || encuestador.includes(searchVal) || answersText.includes(searchVal);
+  });
+
+  // Actualizar KPI total de reportes
+  const kpiTotal = document.getElementById('kpi-reportes-total');
+  if (kpiTotal) {
+    kpiTotal.textContent = records.length;
+  }
+
+  const tbody = document.getElementById('reportes-table-body');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+  if (records.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+          No se encontraron encuestas para esta búsqueda.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  records.forEach(r => {
+    const tr = document.createElement('tr');
+    const dateStr = r.created_at ? new Date(r.created_at).toLocaleString('es-AR') : 'Sin fecha';
+    
+    // Obtener cantidad de habitantes
+    const getVal = (rec, keyWord) => {
+      if (!rec.datos) return undefined;
+      if (rec.datos.hasOwnProperty(keyWord)) return rec.datos[keyWord];
+      const matchKey = Object.keys(rec.datos).find(k => k.toLowerCase().includes(keyWord.toLowerCase()));
+      return matchKey ? rec.datos[matchKey] : undefined;
+    };
+    const q2Val = getVal(r, 'person') || getVal(r, 'q2') || '0';
+    const numPers = parseInt(q2Val) || (q2Val.includes('10') ? 10 : 0) || '-';
+
+    tr.innerHTML = `
+      <td style="padding: 1rem 0.75rem;">${dateStr}</td>
+      <td style="padding: 1rem 0.75rem;"><strong>${r.barrio || '-'}</strong></td>
+      <td style="padding: 1rem 0.75rem;">${r.encuestador || '-'}</td>
+      <td style="padding: 1rem 0.75rem; text-align: center; font-weight: 600;">${numPers}</td>
+      <td style="padding: 1rem 0.75rem; text-align: center;">
+        <button class="btn primary-btn btn-view-detail" style="padding: 0.25rem 0.75rem; font-size: 0.75rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;">
+          <span class="material-symbols-outlined" style="font-size: 14px;">visibility</span> Ver Detalle
+        </button>
+      </td>
+    `;
+
+    // Manejador del modal de detalle
+    tr.querySelector('.btn-view-detail').addEventListener('click', () => {
+      openSurveyModal(r);
+    });
+
+    tbody.appendChild(tr);
+  });
+}
+
+// Abre el modal detallado y agrupa las preguntas de forma inteligente
+function openSurveyModal(survey) {
+  const modal = document.getElementById('survey-modal');
+  const modalBody = document.getElementById('survey-modal-body');
+  if (!modal || !modalBody) return;
+
+  modalBody.innerHTML = '';
+
+  const dateStr = survey.created_at ? new Date(survey.created_at).toLocaleString('es-AR') : 'Sin fecha';
+  
+  // Encabezado con metadatos principales de la encuesta
+  const metaHtml = `
+    <div class="glass" style="margin-bottom: 1.5rem; background: rgba(0, 157, 224, 0.05); border-color: rgba(0, 157, 224, 0.2); display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; padding: 1rem; box-shadow: none;">
+      <div><span style="color: var(--text-muted); font-size: 0.75rem; font-weight: 700; text-transform: uppercase;">Fecha de Carga</span><br><strong>${dateStr}</strong></div>
+      <div><span style="color: var(--text-muted); font-size: 0.75rem; font-weight: 700; text-transform: uppercase;">Barrio</span><br><strong>${survey.barrio || '-'}</strong></div>
+      <div><span style="color: var(--text-muted); font-size: 0.75rem; font-weight: 700; text-transform: uppercase;">Encuestador</span><br><strong>${survey.encuestador || '-'}</strong></div>
+    </div>
+  `;
+  modalBody.insertAdjacentHTML('beforeend', metaHtml);
+
+  // Categorías de agrupación
+  const groups = {
+    "Estructura del Hogar": [],
+    "Identidad": [],
+    "Educación": [],
+    "Desarrollo Social": [],
+    "Conectividad y Tecnología": [],
+    "Discapacidad": [],
+    "Adultos Mayores": [],
+    "Salud y CAPS": [],
+    "Zoonosis y Mascotas": [],
+    "Servicios Públicos": [],
+    "Otros Datos": []
+  };
+
+  const getGroup = (key) => {
+    const k = key.toLowerCase();
+    if (k.includes('persona') || k.includes('menor') || k.includes('hogar') || k.includes('q2') || k.includes('q3')) return "Estructura del Hogar";
+    if (k.includes('dni') || k.includes('document') || k.includes('q6') || k.includes('q7')) return "Identidad";
+    if (k.includes('escuela') || k.includes('leer') || k.includes('estudi') || k.includes('q8') || k.includes('q9') || k.includes('q5')) return "Educación";
+    if (k.includes('programa') || k.includes('merendero') || k.includes('comida') || k.includes('meals') || k.includes('vianda')) return "Desarrollo Social";
+    if (k.includes('wifi') || k.includes('dispositi') || k.includes('pc') || k.includes('celular') || k.includes('conectividad') || k.includes('q16') || k.includes('q17')) return "Conectividad y Tecnología";
+    if (k.includes('discapacidad') || k.includes('cud') || k.includes('taller') || k.includes('q27') || k.includes('q28') || k.includes('q29') || k.includes('q30')) return "Discapacidad";
+    if (k.includes('jubila') || k.includes('pension') || k.includes('centro') || k.includes('mayor') || k.includes('60 años') || k.includes('q36') || k.includes('q37') || k.includes('q38') || k.includes('q39')) return "Adultos Mayores";
+    if (k.includes('caps') || k.includes('salud') || k.includes('vacuna') || k.includes('embaraz') || k.includes('crónic') || k.includes('enfermedad') || k.includes('q42') || k.includes('q43') || k.includes('q44') || k.includes('q46') || k.includes('q47')) return "Salud y CAPS";
+    if (k.includes('mascota') || k.includes('perro') || k.includes('gato') || k.includes('antirráb') || k.includes('castra') || k.includes('q48') || k.includes('q49') || k.includes('q50')) return "Zoonosis y Mascotas";
+    if (k.includes('alumbrado') || k.includes('basura') || k.includes('riego') || k.includes('bache') || k.includes('calle') || k.includes('yuyos') || k.includes('desmalez') || k.includes('q52')) return "Servicios Públicos";
+    return "Otros Datos";
+  };
+
+  if (survey.datos) {
+    Object.entries(survey.datos).forEach(([pregunta, respuesta]) => {
+      const cleanPregunta = pregunta.trim();
+      const cleanRespuesta = (respuesta !== undefined && respuesta !== null) ? String(respuesta).trim() : '';
+
+      // Omitir respuestas vacías para evitar clutter
+      if (cleanRespuesta === '' || cleanRespuesta.toLowerCase() === 'seleccioná una opción...') return;
+
+      const groupName = getGroup(cleanPregunta);
+      groups[groupName].push({ q: cleanPregunta, a: cleanRespuesta });
+    });
+  }
+
+  // Crear la grilla de tarjetas del detalle
+  const gridDiv = document.createElement('div');
+  gridDiv.className = 'survey-details-grid';
+
+  Object.entries(groups).forEach(([groupName, items]) => {
+    if (items.length === 0) return;
+
+    const section = document.createElement('div');
+    section.className = 'details-section';
+    section.innerHTML = `<h3>${groupName}</h3>`;
+
+    items.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'details-item';
+      
+      let valClass = '';
+      const lowerA = item.a.toLowerCase();
+      if (lowerA === 'sí' || lowerA === 'si') valClass = 'val-si';
+      else if (lowerA === 'no') valClass = 'val-no';
+
+      row.innerHTML = `
+        <span class="details-label">${item.q}</span>
+        <span class="details-value ${valClass}">${item.a}</span>
+      `;
+      section.appendChild(row);
+    });
+
+    gridDiv.appendChild(section);
+  });
+
+  modalBody.appendChild(gridDiv);
+  modal.classList.remove('hidden');
+  document.body.style.overflow = 'hidden'; // Detiene el scroll del fondo
+}
+
+// Cierra el modal de detalle
+function closeSurveyModal() {
+  const modal = document.getElementById('survey-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
+  document.body.style.overflow = ''; // Restaura el scroll
+}
+
+// Exporta las encuestas cargadas (según barrio seleccionado) a CSV con BOM UTF-8
+function exportToCSV() {
+  const selectedBarrio = document.getElementById('barrio-filter').value;
+  
+  const records = surveyRecords.filter(r => {
+    if (selectedBarrio === 'todos') return true;
+    const b = r.barrio || (r.datos && r.datos['Barrio Seleccionado']);
+    return b === selectedBarrio;
+  });
+
+  if (records.length === 0) {
+    alert('No hay datos para exportar.');
+    return;
+  }
+
+  try {
+    const csvData = records.map(r => {
+      const flattened = {
+        'ID Encuesta': r.id,
+        'Fecha Registro': r.created_at ? new Date(r.created_at).toLocaleString('es-AR') : '',
+        'Barrio': r.barrio || '',
+        'Encuestador': r.encuestador || ''
+      };
+
+      if (r.datos) {
+        Object.entries(r.datos).forEach(([q, a]) => {
+          flattened[q] = a;
+        });
+      }
+
+      return flattened;
+    });
+
+    const csvString = Papa.unparse(csvData);
+    
+    // Agrega el BOM UTF-8 (\uFEFF) para compatibilidad con Excel en español
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    
+    const barrioSuffix = selectedBarrio === 'todos' ? 'todos_barrios' : selectedBarrio.replace(/\s+/g, '_').toLowerCase();
+    const dateStr = new Date().toISOString().slice(0, 10);
+    
+    link.href = URL.createObjectURL(blob);
+    link.download = `relevamiento_social_${barrioSuffix}_${dateStr}.csv`;
+    link.click();
+  } catch (error) {
+    console.error('Error al exportar CSV:', error);
+    alert('Ocurrió un error al exportar los datos: ' + error.message);
+  }
 }
