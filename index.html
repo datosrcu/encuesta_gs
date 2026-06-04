@@ -1693,12 +1693,6 @@
         let userPos = null;
         let skipResetConfirm = false;
 
-        // --- CONFIGURACIÓN GOOGLE APPS SCRIPT ---
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxznNBVsJ2dw5VssIMmGbTd16p3F08jN3lc1qlbuPZij_CNnVaUJUIeQuWUO2HLJIDW/exec';
-        // ----------------------------------------
-
-
-
         // --- COLA DE ENVÍOS (a prueba de pérdida de datos / offline) ---
         // Cada encuesta se guarda primero en localStorage y se reintenta hasta confirmarse,
         // de modo que nunca se pierde una carga aunque falle la conexión.
@@ -2031,7 +2025,7 @@
             updateVisibility();
         });
 
-        // ===== ALERTAS DE SITUACIONES CRÍTICAS (envío inmediato a Supabase + cola offline) =====
+        // ===== ALERTAS DE SITUACIONES CRÍTICAS (envío inmediato a MySQL + cola offline) =====
         const ALERT_QUEUE_KEY = 'alert_pending_queue';
         let isFlushingAlerts = false;
 

@@ -37,9 +37,6 @@ self.addEventListener('fetch', (event) => {
     // Solo GET. Los POST (envíos a Apps Script) jamás se interceptan ni cachean.
     if (req.method !== 'GET') return;
 
-    const url = new URL(req.url);
-    if (url.hostname.includes('script.google.com')) return; // dejar pasar los envíos
-
     // El documento HTML (navegación o index.html) usa NETWORK-FIRST: así los
     // encuestadores siempre reciben la última versión del formulario cuando hay
     // conexión, y caen a la caché solo si están offline.
