@@ -25,10 +25,84 @@ const dbConfig = {
 };
 
 let pool;
+let useMock = false;
+
+// Mock data structures
+let mockEncuestas = [
+  {
+    id: 1,
+    barrio: "Banda Norte",
+    encuestador: "Juan Pérez",
+    datos: {
+      "Fecha y Hora": "10/6/2026 12:00:00",
+      "Barrio Seleccionado": "Banda Norte",
+      "Ubicación": "-33.1150, -64.3450",
+      "Duración (seg)": 120,
+      "1. Nombre y apellido del encuestador": "Juan Pérez",
+      "person": "3",
+      "q2": "3",
+      "q3": "1"
+    },
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 2,
+    barrio: "Alberdi",
+    encuestador: "María Gómez",
+    datos: {
+      "Fecha y Hora": "10/6/2026 12:15:00",
+      "Barrio Seleccionado": "Alberdi",
+      "Ubicación": "-33.1300, -64.3350",
+      "Duración (seg)": 150,
+      "1. Nombre y apellido del encuestador": "María Gómez",
+      "person": "4",
+      "q2": "4",
+      "q3": "2"
+    },
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 3,
+    barrio: "Centro",
+    encuestador: "Carlos López",
+    datos: {
+      "Fecha y Hora": "10/6/2026 12:30:00",
+      "Barrio Seleccionado": "Centro",
+      "Ubicación": "-33.1236, -64.3493",
+      "Duración (seg)": 180,
+      "1. Nombre y apellido del encuestador": "Carlos López",
+      "person": "2",
+      "q2": "2",
+      "q3": "0"
+    },
+    created_at: new Date().toISOString()
+  }
+];
+
+let mockAlertas = [
+  {
+    id: 1,
+    tipo: "Riesgo de vida / urgencia médica",
+    urgencia: "Alta",
+    nota: "Vecino con fiebre alta y sin movilidad",
+    encuestador: "Juan Pérez",
+    barrio: "Banda Norte",
+    ubicacion: "-33.1150, -64.3450",
+    encuestado: {
+      nombre: "Carlos",
+      apellido: "Rodríguez",
+      dni: "12345678",
+      direccion: "Calle Falsa 123",
+      telefono: "3584112233"
+    },
+    estado: "nueva",
+    created_at: new Date().toISOString()
+  }
+];
 
 async function initDb() {
-  const maxRetries = 10;
-  let delay = 3000;
+  const maxRetries = 2; // Reducido para desarrollo local rápido
+  let delay = 1000;
 
   for (let i = 1; i <= maxRetries; i++) {
     try {
@@ -46,17 +120,19 @@ async function initDb() {
     } catch (err) {
       console.error(`Error al conectar a MySQL en el intento ${i}:`, err.message);
       if (i === maxRetries) {
-        console.error('Se alcanzaron los intentos máximos de conexión. Saliendo...');
-        process.exit(1);
+        console.warn('No se pudo conectar a la base de datos MySQL. Se usará el modo MOCK con datos en memoria.');
+        useMock = true;
+        pool = null;
+        return;
       }
       console.log(`Esperando ${delay / 1000} segundos antes del siguiente intento...`);
       await new Promise(res => setTimeout(res, delay));
-      delay = Math.min(delay * 1.5, 15000);
     }
   }
 }
 
 async function createTables() {
+  if (useMock) return;
   try {
     const conn = await pool.getConnection();
     
@@ -99,11 +175,14 @@ async function createTables() {
 // --- Endpoints de API ---
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', database: pool ? 'connected' : 'disconnected' });
+  res.json({ status: 'ok', database: useMock ? 'mocked' : (pool ? 'connected' : 'disconnected') });
 });
 
 // Obtener todas las encuestas
 app.get('/api/encuestas', async (req, res) => {
+  if (useMock) {
+    return res.json(mockEncuestas);
+  }
   try {
     const [rows] = await pool.query('SELECT id, barrio, encuestador, datos, created_at FROM encuestas ORDER BY id DESC');
     const encuestas = rows.map(r => {
@@ -128,6 +207,9 @@ app.get('/api/encuestas', async (req, res) => {
 
 // Obtener todas las alertas
 app.get('/api/alertas', async (req, res) => {
+  if (useMock) {
+    return res.json(mockAlertas);
+  }
   try {
     const [rows] = await pool.query('SELECT id, tipo, urgencia, nota, encuestador, barrio, ubicacion, encuestado, estado, created_at FROM alertas ORDER BY id DESC');
     const alertas = rows.map(r => {
@@ -163,6 +245,19 @@ app.post('/api/encuestas', async (req, res) => {
     return res.status(400).json({ error: 'Faltan los datos de la encuesta' });
   }
 
+  if (useMock) {
+    const newSurvey = {
+      id: mockEncuestas.length + 1,
+      barrio: barrio || null,
+      encuestador: encuestador || null,
+      datos,
+      created_at: new Date().toISOString()
+    };
+    mockEncuestas.unshift(newSurvey);
+    console.log(`[Mock] Encuesta guardada con ID: ${newSurvey.id}`);
+    return res.status(201).json({ success: true, id: newSurvey.id });
+  }
+
   try {
     const [result] = await pool.query(
       'INSERT INTO encuestas (barrio, encuestador, datos) VALUES (?, ?, ?)',
@@ -183,6 +278,24 @@ app.post('/api/alertas', async (req, res) => {
 
   if (!tipo) {
     return res.status(400).json({ error: 'Falta el tipo de alerta' });
+  }
+
+  if (useMock) {
+    const newAlert = {
+      id: mockAlertas.length + 1,
+      tipo,
+      urgencia: urgencia || 'Alta',
+      nota: nota || null,
+      encuestador: encuestador || null,
+      barrio: barrio || null,
+      ubicacion: ubicacion || null,
+      encuestado: encuestado || {},
+      estado: estado || 'nueva',
+      created_at: new Date().toISOString()
+    };
+    mockAlertas.unshift(newAlert);
+    console.log(`[Mock] Alerta guardada con ID: ${newAlert.id}`);
+    return res.status(201).json({ success: true, id: newAlert.id });
   }
 
   try {

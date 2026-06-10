@@ -72,9 +72,11 @@ function initNavigation() {
         activeSection.classList.add('active');
         
         // Corrección de Leaflet: invalidar tamaño al mostrar el tab del mapa
-        if (targetId === 'sec-mapa' && leafletMap) {
+        if (targetId === 'sec-mapa') {
           setTimeout(() => {
-            leafletMap.invalidateSize();
+            if (leafletMap) {
+              leafletMap.invalidateSize();
+            }
             renderSurveyMap();
           }, 100);
         }
@@ -1260,20 +1262,75 @@ function renderSurveyMap() {
     return b === selectedBarrio;
   });
 
-  // Extraer puntos válidos de georreferencia
+  // Extraer puntos válidos de georreferencia de forma robusta
   const points = [];
   records.forEach(r => {
-    if (!r.datos) return;
-    const coordsStr = r.datos['Ubicación'] || r.datos['ubicacion'] || '';
-    if (coordsStr) {
-      const parts = coordsStr.split(',');
-      if (parts.length === 2) {
-        const lat = parseFloat(parts[0].trim());
-        const lng = parseFloat(parts[1].trim());
-        if (!isNaN(lat) && !isNaN(lng)) {
-          points.push({ lat, lng, record: r });
+    let lat = null;
+    let lng = null;
+
+    // 1. Intentar obtener de r.datos si existe
+    if (r.datos) {
+      // Caso 1a: Formato string combinada "lat, lng" en 'Ubicación', 'ubicacion', etc.
+      const coordsStr = r.datos['Ubicación'] || r.datos['ubicacion'] || r.datos['Ubicacion'] || '';
+      if (coordsStr && typeof coordsStr === 'string') {
+        const parts = coordsStr.split(',');
+        if (parts.length === 2) {
+          const parsedLat = parseFloat(parts[0].trim());
+          const parsedLng = parseFloat(parts[1].trim());
+          if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+            lat = parsedLat;
+            lng = parsedLng;
+          }
         }
       }
+
+      // Caso 1b: Formato campos separados 'latitud' / 'longitud' o similares en datos
+      if (lat === null || lng === null) {
+        const dLat = r.datos['latitud'] || r.datos['Latitud'] || r.datos['lat'] || r.datos['Lat'];
+        const dLng = r.datos['longitud'] || r.datos['Longitud'] || r.datos['long'] || r.datos['Long'] || r.datos['lng'] || r.datos['Lng'] || r.datos['lon'] || r.datos['Lon'];
+        if (dLat !== undefined && dLng !== undefined) {
+          const parsedLat = parseFloat(dLat);
+          const parsedLng = parseFloat(dLng);
+          if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+            lat = parsedLat;
+            lng = parsedLng;
+          }
+        }
+      }
+    }
+
+    // 2. Intentar obtener de propiedades directas de r
+    if (lat === null || lng === null) {
+      // Caso 2a: Propiedad 'ubicacion' o 'ubicación' como string "lat, lng"
+      const coordsStr = r.ubicacion || r.ubicación || '';
+      if (coordsStr && typeof coordsStr === 'string') {
+        const parts = coordsStr.split(',');
+        if (parts.length === 2) {
+          const parsedLat = parseFloat(parts[0].trim());
+          const parsedLng = parseFloat(parts[1].trim());
+          if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+            lat = parsedLat;
+            lng = parsedLng;
+          }
+        }
+      }
+      
+      // Caso 2b: Propiedades directas de latitud/longitud
+      const rLat = r.latitud || r.Latitud || r.lat || r.Lat;
+      const rLng = r.longitud || r.Longitud || r.long || r.Long || r.lng || r.Lng || r.lon || r.Lon;
+      if (rLat !== undefined && rLng !== undefined) {
+        const parsedLat = parseFloat(rLat);
+        const parsedLng = parseFloat(rLng);
+        if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+          lat = parsedLat;
+          lng = parsedLng;
+        }
+      }
+    }
+
+    // Si obtuvimos coordenadas válidas, agregar el punto
+    if (lat !== null && lng !== null) {
+      points.push({ lat, lng, record: r });
     }
   });
 
