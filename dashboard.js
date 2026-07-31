@@ -39,6 +39,13 @@ document.addEventListener('DOMContentLoaded', () => {
     exportBtn.addEventListener('click', exportToCSV);
   }
 
+  // Evento de sincronización con Google Sheets
+  const syncBtn = document.getElementById('btn-sync-sheets');
+  if (syncBtn) {
+    syncBtn.addEventListener('click', syncWithGoogleSheets);
+  }
+
+
   // Eventos de cierre de modal
   const closeBtn = document.getElementById('close-modal-btn');
   if (closeBtn) {
@@ -1201,6 +1208,81 @@ function closeSurveyModal() {
 }
 
 // Exporta las encuestas cargadas (según barrio seleccionado) a CSV con BOM UTF-8
+// Mapea un registro individual de encuesta al arreglo ordenado de las 52 columnas del tablero
+function mapRecordToStandardObject(r) {
+  const d = r.datos || {};
+  const getVal = (keyWord) => {
+    if (d.hasOwnProperty(keyWord)) return d[keyWord];
+    const matchKey = Object.keys(d).find(k => k.toLowerCase().includes(keyWord.toLowerCase()));
+    return matchKey ? d[matchKey] : '';
+  };
+
+  let lat = '', lng = '', coor = getVal('ubicacion') || getVal('ubicación') || '';
+  if (coor && typeof coor === 'string') {
+    const parts = coor.split(',');
+    if (parts.length === 2) {
+      lat = parts[0].trim();
+      lng = parts[1].trim();
+    }
+  }
+
+  return {
+    'META_BARRIO': r.barrio || getVal('Barrio Seleccionado') || getVal('barrio') || '',
+    'META_ID': 'GS-B-' + String(r.id).padStart(5, '0'),
+    'META_FECHA': r.created_at ? new Date(r.created_at).toLocaleString('es-AR') : (getVal('Fecha y Hora') || ''),
+    'META_DURACION': getVal('Duración (seg)') || getVal('duracion_seg') || '',
+    'META_ENCUESTADOR': r.encuestador || getVal('1. Nombre y apellido del encuestador') || getVal('q1') || '',
+    'META_DIRECCION': getVal('6. Dirección y altura') || getVal('encuestado_direccion') || '',
+    'META_LAT': lat,
+    'META_LONG': lng,
+    'META_COOR': coor,
+    'PII_NOMBRE': getVal('2. Nombre') || getVal('encuestado_nombre') || '',
+    'PII_APELLIDO': getVal('3. Apellido') || getVal('encuestado_apellido') || '',
+    'PII_DNI': getVal('4. DNI') || getVal('encuestado_dni') || '',
+    'PII_TELEFONO': getVal('5. Número de teléfono') || getVal('encuestado_telefono') || '',
+    'PII_EMAIL': getVal('PII_EMAIL') || '',
+    'VIV_PERSONAS': getVal('8. ¿Cuántas personas') || getVal('q2') || '',
+    'VIV_MENORES': getVal('9. De las personas') || getVal('q3') || '',
+    'VIV_ESCOLARIDAD_MENOR': getVal('9.b. Los menores') || getVal('q5') || '',
+    'VIV_DNI_COMPLETO': getVal('10. ¿Cuentan con DNI') || getVal('q6') || '',
+    'VIV_DNI_FALTANTE_CANT': getVal('10.a. Especifique') || getVal('q7') || '',
+    'VIV_ANALFABETISMO': getVal('11. ¿Hay personas mayores') || getVal('q8') || '',
+    'VIV_ANALFABETISMO_CANT': getVal('11.a. Indique cuántas') || getVal('q9') || '',
+    'PROG_BENEFICIARIO': getVal('12. ¿Algún integrante') || getVal('q24_bool') || '',
+    'PROG_NOMBRE': getVal('12.a. ¿Qué programa?') || getVal('q24') || '',
+    'ALIM_COMEDOR': getVal('13. ¿Asiste algún integrante') || getVal('q25') || '',
+    'ALIM_COMEDOR_NOMBRE': getVal('13.a. Indique el nombre del merendero') || getVal('q26') || '',
+    'CONECT_DISPOSITIVO': getVal('15. ¿Actualmente') || getVal('q16') || '',
+    'CONECT_WIFI': getVal('16. ¿Su hogar') || getVal('q17') || '',
+    'DISC_RESIDE': getVal('17. ¿Reside alguna') || getVal('q27') || '',
+    'DISC_TIPO': getVal('17.a. ¿Qué tipo') || getVal('q29') || '',
+    'DISC_CUD': getVal('17.b. ¿Tiene Certificado') || getVal('q33') || '',
+    'DISC_PROGRAMA': getVal('17.c. ¿Participa de alguna') || getVal('q30') || '',
+    'DISC_PROGRAMA_NOMBRE': getVal('17.d. Indique el nombre de la actividad') || getVal('q31') || '',
+    'DISC_NOPARTICIPA_RAZON': getVal('17.e. Por favor explique') || getVal('q32') || '',
+    'AM_RESIDE': getVal('18. ¿En el hogar') || getVal('q36') || '',
+    'AM_JUBILACION': getVal('18.a. ¿Reciben alguna') || getVal('q37') || '',
+    'AM_CENTRO_JUBILADOS': getVal('18.b. ¿Asisten a algún') || getVal('q38') || '',
+    'AM_CENTRO_NOMBRE': getVal('18.c. Indique el nombre del Centro') || getVal('q39') || '',
+    'NIN_EMBARAZO': getVal('19. ¿Hay alguna persona') || getVal('q46') || '',
+    'NIN_VACUNAS': getVal('20. Los niños residentes') || getVal('q42') || '',
+    'SAL_CAPS': getVal('21. ¿Asisten a algún') || getVal('q43') || '',
+    'SAL_CAPS_NOMBRE': getVal('21.a. Indique a qué') || getVal('q44') || '',
+    'SAL_ENF_CRONICA': getVal('22. ¿Alguien posee') || getVal('q45') || '',
+    'SAL_CONSUMOS': getVal('23. ¿Hay alguna persona con consumos') || getVal('q47') || '',
+    'ALIM_COMIDAS_CANT': getVal('14. ¿Qué comidas') || getVal('meals') || '',
+    'MASC_TIENE': getVal('24. ¿Tienen mascotas') || getVal('q48') || '',
+    'MASC_VACUNA': getVal('24.a. ¿Tienen colocada') || getVal('q49') || '',
+    'MASC_CASTRACION': getVal('24.b. ¿Están castrados') || getVal('q50') || '',
+    'SERV_ALUMBRADO': getVal('7.1.') || getVal('q52_1') || '',
+    'SERV_BASURA': getVal('7.2.') || getVal('q52_2') || '',
+    'SERV_YUYOS': getVal('7.3.') || getVal('q52_3') || '';
+    'SERV_CALLE': getVal('7.4.') || getVal('q52_4') || '',
+    'SERV_RIEGO': getVal('7.5.') || getVal('q52_5') || ''
+  };
+}
+
+// Exporta las encuestas cargadas a CSV con cabeceras estandarizadas de 52 columnas y BOM UTF-8
 function exportToCSV() {
   const selectedBarrio = document.getElementById('barrio-filter').value;
   
@@ -1216,23 +1298,7 @@ function exportToCSV() {
   }
 
   try {
-    const csvData = records.map(r => {
-      const flattened = {
-        'ID Encuesta': r.id,
-        'Fecha Registro': r.created_at ? new Date(r.created_at).toLocaleString('es-AR') : '',
-        'Barrio': r.barrio || '',
-        'Encuestador': r.encuestador || ''
-      };
-
-      if (r.datos) {
-        Object.entries(r.datos).forEach(([q, a]) => {
-          flattened[q] = a;
-        });
-      }
-
-      return flattened;
-    });
-
+    const csvData = records.map(r => mapRecordToStandardObject(r));
     const csvString = Papa.unparse(csvData);
     
     // Agrega el BOM UTF-8 (\uFEFF) para compatibilidad con Excel en español
@@ -1250,6 +1316,40 @@ function exportToCSV() {
     alert('Ocurrió un error al exportar los datos: ' + error.message);
   }
 }
+
+// Dispara la sincronización masiva directa del servidor hacia Google Sheets
+async function syncWithGoogleSheets() {
+  const syncBtn = document.getElementById('btn-sync-sheets');
+  const originalText = syncBtn ? syncBtn.innerHTML : '';
+  
+  if (!confirm('¿Querés enviar todas las encuestas registradas en la base de datos a Google Sheets?')) {
+    return;
+  }
+
+  if (syncBtn) {
+    syncBtn.style.pointerEvents = 'none';
+    syncBtn.style.opacity = '0.7';
+  }
+
+  try {
+    const res = await fetch('/api/sync-sheets', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      alert(`✓ ${data.message}`);
+    } else {
+      alert(`⚠ Error: ${data.error || 'No se pudo sincronizar'}`);
+    }
+  } catch (err) {
+    console.error('Error al sincronizar con Google Sheets:', err);
+    alert('Error al conectar con el servidor: ' + err.message);
+  } finally {
+    if (syncBtn) {
+      syncBtn.style.pointerEvents = 'auto';
+      syncBtn.style.opacity = '1';
+    }
+  }
+}
+
 
 // Inicializa o actualiza el mapa interactivo con los marcadores de las encuestas
 function renderSurveyMap() {

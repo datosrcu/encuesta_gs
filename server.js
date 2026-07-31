@@ -237,6 +237,128 @@ app.get('/api/alertas', async (req, res) => {
   }
 });
 
+// --- Integración con Google Sheets Webhook ---
+function mapRecordToSheetRow(r) {
+  const d = (typeof r.datos === 'string') ? JSON.parse(r.datos) : (r.datos || {});
+
+  const getVal = (keyWord) => {
+    if (d.hasOwnProperty(keyWord)) return d[keyWord];
+    const matchKey = Object.keys(d).find(k => k.toLowerCase().includes(keyWord.toLowerCase()));
+    return matchKey ? d[matchKey] : '';
+  };
+
+  let lat = '', lng = '', coor = getVal('ubicacion') || getVal('ubicación') || '';
+  if (coor && typeof coor === 'string') {
+    const parts = coor.split(',');
+    if (parts.length === 2) {
+      lat = parts[0].trim();
+      lng = parts[1].trim();
+    }
+  }
+
+  const barrio = r.barrio || getVal('Barrio Seleccionado') || getVal('barrio') || '';
+  const metaId = 'GS-B-' + String(r.id).padStart(5, '0');
+  const fecha = r.created_at ? new Date(r.created_at).toLocaleString('es-AR') : (getVal('Fecha y Hora') || '');
+  const duracion = getVal('Duración (seg)') || getVal('duracion_seg') || '';
+  const encuestador = r.encuestador || getVal('1. Nombre y apellido del encuestador') || getVal('q1') || '';
+  const direccion = getVal('6. Dirección y altura') || getVal('encuestado_direccion') || '';
+  const nombre = getVal('2. Nombre') || getVal('encuestado_nombre') || '';
+  const apellido = getVal('3. Apellido') || getVal('encuestado_apellido') || '';
+  const dni = getVal('4. DNI') || getVal('encuestado_dni') || '';
+  const telefono = getVal('5. Número de teléfono') || getVal('encuestado_telefono') || '';
+  const email = getVal('PII_EMAIL') || '';
+
+  const vivPersonas = getVal('8. ¿Cuántas personas') || getVal('q2') || '';
+  const vivMenores = getVal('9. De las personas') || getVal('q3') || '';
+  const escolaridadMenor = getVal('9.b. Los menores') || getVal('q5') || '';
+  const dniCompleto = getVal('10. ¿Cuentan con DNI') || getVal('q6') || '';
+  const dniFaltanteCant = getVal('10.a. Especifique') || getVal('q7') || '';
+  const analfabetismo = getVal('11. ¿Hay personas mayores') || getVal('q8') || '';
+  const analfabetismoCant = getVal('11.a. Indique cuántas') || getVal('q9') || '';
+
+  const progBeneficiario = getVal('12. ¿Algún integrante') || getVal('q24_bool') || '';
+  const progNombre = getVal('12.a. ¿Qué programa?') || getVal('q24') || '';
+  const alimComedor = getVal('13. ¿Asiste algún integrante') || getVal('q25') || '';
+  const alimComedorNombre = getVal('13.a. Indique el nombre del merendero') || getVal('q26') || '';
+
+  const conectDispositivo = getVal('15. ¿Actualmente') || getVal('q16') || '';
+  const conectWifi = getVal('16. ¿Su hogar') || getVal('q17') || '';
+
+  const discReside = getVal('17. ¿Reside alguna') || getVal('q27') || '';
+  const discTipo = getVal('17.a. ¿Qué tipo') || getVal('q29') || '';
+  const discCud = getVal('17.b. ¿Tiene Certificado') || getVal('q33') || '';
+  const discPrograma = getVal('17.c. ¿Participa de alguna') || getVal('q30') || '';
+  const discProgramaNombre = getVal('17.d. Indique el nombre de la actividad') || getVal('q31') || '';
+  const discNoParticipaRazon = getVal('17.e. Por favor explique') || getVal('q32') || '';
+
+  const amReside = getVal('18. ¿En el hogar') || getVal('q36') || '';
+  const amJubilacion = getVal('18.a. ¿Reciben alguna') || getVal('q37') || '';
+  const amCentroJubilados = getVal('18.b. ¿Asisten a algún') || getVal('q38') || '';
+  const amCentroNombre = getVal('18.c. Indique el nombre del Centro') || getVal('q39') || '';
+
+  const ninEmbarazo = getVal('19. ¿Hay alguna persona') || getVal('q46') || '';
+  const ninVacunas = getVal('20. Los niños residentes') || getVal('q42') || '';
+
+  const salCaps = getVal('21. ¿Asisten a algún') || getVal('q43') || '';
+  const salCapsNombre = getVal('21.a. Indique a qué') || getVal('q44') || '';
+  const salEnfCronica = getVal('22. ¿Alguien posee') || getVal('q45') || '';
+  const salConsumos = getVal('23. ¿Hay alguna persona con consumos') || getVal('q47') || '';
+
+  const alimComidasCant = getVal('14. ¿Qué comidas') || getVal('meals') || '';
+
+  const mascTiene = getVal('24. ¿Tienen mascotas') || getVal('q48') || '';
+  const mascVacuna = getVal('24.a. ¿Tienen colocada') || getVal('q49') || '';
+  const mascCastracion = getVal('24.b. ¿Están castrados') || getVal('q50') || '';
+
+  const servAlumbrado = getVal('7.1.') || getVal('q52_1') || '';
+  const servBasura = getVal('7.2.') || getVal('q52_2') || '';
+  const servYuyos = getVal('7.3.') || getVal('q52_3') || '';
+  const servCalle = getVal('7.4.') || getVal('q52_4') || '';
+  const servRiego = getVal('7.5.') || getVal('q52_5') || '';
+
+  return [
+    barrio, metaId, fecha, duracion, encuestador, direccion, lat, lng, coor,
+    nombre, apellido, dni, telefono, email,
+    vivPersonas, vivMenores, escolaridadMenor, dniCompleto, dniFaltanteCant, analfabetismo, analfabetismoCant,
+    progBeneficiario, progNombre, alimComedor, alimComedorNombre,
+    conectDispositivo, conectWifi,
+    discReside, discTipo, discCud, discPrograma, discProgramaNombre, discNoParticipaRazon,
+    amReside, amJubilacion, amCentroJubilados, amCentroNombre,
+    ninEmbarazo, ninVacunas,
+    salCaps, salCapsNombre, salEnfCronica, salConsumos,
+    alimComidasCant,
+    mascTiene, mascVacuna, mascCastracion,
+    servAlumbrado, servBasura, servYuyos, servCalle, servRiego
+  ];
+}
+
+async function sendToGoogleSheets(rows) {
+  const webhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
+  if (!webhookUrl) {
+    console.log('[Google Sheets] Webhook URL no configurada en .env. Omitiendo sync directo.');
+    return false;
+  }
+  try {
+    const payload = Array.isArray(rows[0]) ? rows : [rows];
+    console.log(`[Google Sheets] Enviando ${payload.length} registro(s) a Google Sheets...`);
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      console.log('[Google Sheets] Sync exitoso.');
+      return true;
+    } else {
+      console.error('[Google Sheets] Error en respuesta de Webhook:', res.status);
+      return false;
+    }
+  } catch (err) {
+    console.error('[Google Sheets] Excepción al conectar con Webhook:', err.message);
+    return false;
+  }
+}
+
 // Guardar Encuesta
 app.post('/api/encuestas', async (req, res) => {
   const { barrio, encuestador, datos } = req.body;
@@ -255,6 +377,7 @@ app.post('/api/encuestas', async (req, res) => {
     };
     mockEncuestas.unshift(newSurvey);
     console.log(`[Mock] Encuesta guardada con ID: ${newSurvey.id}`);
+    sendToGoogleSheets(mapRecordToSheetRow(newSurvey)).catch(() => {});
     return res.status(201).json({ success: true, id: newSurvey.id });
   }
 
@@ -265,12 +388,54 @@ app.post('/api/encuestas', async (req, res) => {
     );
     
     console.log(`Encuesta guardada con ID: ${result.insertId}`);
+    
+    const newSurveyRecord = {
+      id: result.insertId,
+      barrio: barrio || null,
+      encuestador: encuestador || null,
+      datos,
+      created_at: new Date().toISOString()
+    };
+    
+    // Impacto automático en Google Sheets en segundo plano
+    sendToGoogleSheets(mapRecordToSheetRow(newSurveyRecord)).catch(() => {});
+
     res.status(201).json({ success: true, id: result.insertId });
   } catch (err) {
     console.error('Error al guardar encuesta:', err);
     res.status(500).json({ error: 'Error interno del servidor al guardar la encuesta' });
   }
 });
+
+// Endpoint para sincronización masiva a Google Sheets
+app.post('/api/sync-sheets', async (req, res) => {
+  try {
+    let records = [];
+    if (useMock) {
+      records = mockEncuestas;
+    } else {
+      const [rows] = await pool.query('SELECT id, barrio, encuestador, datos, created_at FROM encuestas ORDER BY id ASC');
+      records = rows;
+    }
+    
+    if (records.length === 0) {
+      return res.json({ success: true, message: 'No hay encuestas para sincronizar.', synced: 0 });
+    }
+
+    const mappedRows = records.map(r => mapRecordToSheetRow(r));
+    const ok = await sendToGoogleSheets(mappedRows);
+    
+    if (ok) {
+      res.json({ success: true, message: `Sincronizados ${mappedRows.length} registros exitosamente con Google Sheets.`, synced: mappedRows.length });
+    } else {
+      res.status(500).json({ error: 'No se pudo sincronizar con Google Sheets. Verificá la variable GOOGLE_SHEETS_WEBHOOK_URL en tu .env' });
+    }
+  } catch (err) {
+    console.error('Error en sync-sheets:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // Guardar Alerta
 app.post('/api/alertas', async (req, res) => {
