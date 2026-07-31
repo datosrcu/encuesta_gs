@@ -1276,8 +1276,9 @@ function mapRecordToStandardObject(r) {
     'MASC_CASTRACION': getVal('24.b. ¿Están castrados') || getVal('q50') || '',
     'SERV_ALUMBRADO': getVal('7.1.') || getVal('q52_1') || '',
     'SERV_BASURA': getVal('7.2.') || getVal('q52_2') || '',
-    'SERV_YUYOS': getVal('7.3.') || getVal('q52_3') || '';
+    'SERV_YUYOS': getVal('7.3.') || getVal('q52_3') || '',
     'SERV_CALLE': getVal('7.4.') || getVal('q52_4') || '',
+
     'SERV_RIEGO': getVal('7.5.') || getVal('q52_5') || ''
   };
 }
